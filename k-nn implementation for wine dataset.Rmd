@@ -1,0 +1,184 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_notebook: default
+  word_document: default
+---
+
+Step - 1 - collecting the data - 
+
+The dataset used in the question is the wine dataset downloaded from Machine Learning repository of UC Irvine. The 13 features are - (dontated by Riccardo Leardi, riclea '@' anchem.unige.it ) 
+1) Alcohol 
+2) Malic acid 
+3) Ash 
+4) Alcalinity of ash 
+5) Magnesium 
+6) Total phenols 
+7) Flavanoids 
+8) Nonflavanoid phenols 
+9) Proanthocyanins 
+10)Color intensity 
+11)Hue 
+12)OD280/OD315 of diluted wines 
+13)Proline 
+
+The data is downloaded from UC Irvine machine learning repository as follows - 
+
+```{r}
+dataurl <- "https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data"
+download.file(url = dataurl, destfile = "wine.data")
+wine_df <- read.csv("wine.data", header = FALSE)
+```
+
+
+Step - 2 - Exploring and preparing data
+
+The data is saved in wine_df as seen in Step - I. Next, we will take a look at the structure of the data using str function() as follows - 
+
+```{r}
+str(wine_df)
+```
+
+The attribute with the class label is at index 1. It consists of 3 values 1, 2 & 3. These class labels are going to be predicted by the K-NN model.Since it is nominal variable we will analyze using table() as follows - 
+
+```{r}
+table(wine_df$V1)
+```
+We can see that we have 59 records for class one, 71 records for classs two and 48 records for class three. 
+
+Many R machine learning classifiers require that the target feature is coded as a factor, so we will need to recode the diagnosis variable.
+
+```{r}
+wine_df$V1 <- factor(wine_df$V1, levels = c(1,2,3),
+                     labels = c("One","Two","Three"))
+```
+
+Next, We would like to display the results in percentages for V1 column. We will do this by multiplying the proportions by 100, then using the round() function as follows - 
+
+```{r}
+round(prop.table(table(wine_df$V1)) * 100, digits = 1)
+```
+We have 33.1 % records of class one, 39.9% records of class two and 27% records for class three. 
+
+To take a closer look at the other features we will use Summary function on the three of these features as follows - 
+
+```{r}
+summary(wine_df[c("V3", "V4", "V14")])
+```
+
+Looking at these results, it is pretty clear we need to apply normalization as V3 and V4 have very small range however V14 ranges from 278 to 1680. As a result, the impact of V14 is going to be much larger than V3 and V4. 
+
+The class variable or V1 is in particular order i.e. all the 1s are followed by 2's which are then followed by 3's. We need to shuffle the data in random manner to make sure that all the classes are selected randomly and have equal probability of getting selected. The code to do is as follows - 
+```{r}
+wine_df <- wine_df[sample(nrow(wine_df)),]
+```
+
+
+#### Transformation - normalizing numeric data
+
+A function named normalize() will be created to normalize the features. This function will take a vector x of numeric values, and for each value in x, it will subtract the minimum value in x and will divide it by the range of values in x and finally it will return the vector. The code for this function is as follows - 
+
+```{r}
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x)))}
+```
+
+The lapply() function takes a list and applies a specified function to each list element. As a data frame is a list of equal-length vectors, we will be using lapply() to apply normalize() to each numerical feature in the data frame. The final step is to convert the list returned by lapply() to a data frame, using the as.data.frame() function. The code to do that is as follows -
+
+```{r}
+wine_dfn <- as.data.frame(lapply(wine_df[2:14], normalize))
+```
+
+To verify the transformation is done correctly, we will check summary of the one of the features as follows - 
+
+```{r}
+summary(wine_dfn$V14)
+```
+We can see that the numbers are between 0 and 1. Hence the data is said to be normalized. 
+
+#### Data Preparation - creating training and test datasets
+
+To see how well our learner performs on a dataset of unlabeled data we will be dividing data into two portions - training dataset that will be used to build k-nn model and a test dataset that will be used to estimate the predictive accuracy of the model. The first 130 records will be used for the training dataset and the remaining 48 to simulate new records
+
+
+```{r}
+wine_train <- wine_dfn[1:130, ]
+wine_test <- wine_dfn[131:178, ]
+```
+
+The target variable which is V1, will be stored in factor vectors, split between the training and test datasets as follows -
+
+```{r}
+wine_train_labels <- wine_df[1:130, 1]
+wine_test_labels <- wine_df[131:178, 1]
+```
+
+
+Step - 3 - training a model on the data 
+
+For training and classification using knn() we need to pass four parameters to the function. The first parameter is training dataframe, second parameter is testing dataframe, third parameter is a factor vector with the class for each row in the training data and k is an integer that represent the nearest neighbors. To classify the wine dataset following code is used:
+
+```{r}
+library(class)
+wine_test_pred <- knn(train = wine_train, test = wine_test, cl = wine_train_labels, k = 10)
+```
+
+The above code will return a factor vector of predicted labels for each of the examples in the test dataset, which are being assigned to wine_test_pred. 
+
+Step - 4 - evaluating model performance
+
+To evaluate how well the predicted classes in the wine_test_pred vector matches up with the known values in the wine_test_labels_vector, Crosstable() function is used, with all the unnecessary chi-square values from the output removed as follows :
+
+```{r}
+library(gmodels)
+CrossTable(x = wine_test_labels, y = wine_test_pred, prop.chisq = FALSE)
+```
+From the Crosstable, we can see that other than for class Two, the k-nn model shows pretty good accuracy in predicting the classes one and three. There is only one misclassification for class two. The accuracy rate is 100% for class one and two and 95% for class Two.
+
+Step - 5 - Improving model performance 
+
+To improve the performance, first an alternative method for rescaling our numeric features is used. Instead of using normalize(), scale() function will be used. which by default, rescales values using the z-score standardization. Following code is used for that :
+
+```{r}
+wine_z <- as.data.frame(scale(wine_df[-1]))
+```
+
+The code will rescale all the features except for V1 and will save the result in wine_z data frame. To verify the transformation was successfully applied we check one of the features as follows:
+
+```{r}
+summary(wine_z$V2)
+```
+
+We can see that the mean of the standardized variable is 0, which should be the case. The range is also fairly compact. 
+
+Next, we wil follow the same steps from above of dividing the data into training and test data sets, and then classify the test instances using the knn() functions. The results same as above will be validated using crosstable() function. The code to do this is as follows:
+
+```{r}
+wine_train <- wine_z[1:130, ]
+wine_test <- wine_z[131:178, ]
+wine_train_labels <- wine_df[1:130, 1]
+wine_test_labels <- wine_df[131:178, 1]
+wine_test_pred <- knn(train = wine_train, test = wine_test, cl = wine_train_labels, k = 10)
+CrossTable(x = wine_test_labels, y = wine_test_pred, prop.chisq = FALSE)
+```
+We do not see any change in the model after changing the transformation method to z-score transformation to normalize() 
+
+Secondly, we try to improve the performance of the model by varying the different values of k as follows:
+
+```{r}
+wine_train <- wine_dfn[1:130, ]
+wine_test <- wine_dfn[131:178, ]
+
+wine_test_pred <- knn(train = wine_train, test = wine_test, cl = wine_train_labels, k=5)
+CrossTable(x = wine_test_labels, y = wine_test_pred, prop.chisq=FALSE)
+
+wine_test_pred <- knn(train = wine_train, test = wine_test, cl = wine_train_labels, k=11)
+CrossTable(x = wine_test_labels, y = wine_test_pred, prop.chisq=FALSE)
+
+wine_test_pred <- knn(train = wine_train, test = wine_test, cl = wine_train_labels, k=15)
+CrossTable(x = wine_test_labels, y = wine_test_pred, prop.chisq=FALSE)
+
+```
+
+From the above results, we can see that the results for k = 5 are little less accurate than k = 11 and k = 15. Overall k-nn model has very high accuracy rate. 
